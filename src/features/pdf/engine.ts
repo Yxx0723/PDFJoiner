@@ -121,6 +121,18 @@ export async function inspectPdfBytes(bytes: Uint8Array): Promise<PdfInspection>
     });
   }
 
+  return inspectDocument(doc);
+}
+
+/**
+ * Structural inspection of an **already parsed** document.
+ *
+ * Exported for the rotation worker, which needs every page's `/Rotate` plus the
+ * usual inspection facts from a single `PDFDocument.load()` instead of parsing
+ * the same file twice. The body is the original `inspectPdfBytes` logic, so the
+ * merge / split / image tools see exactly the same results as before.
+ */
+export function inspectDocument(doc: PDFDocument): PdfInspection {
   const pageCount = doc.getPageCount();
   if (pageCount === 0) {
     throw new PdfEngineError('empty-document', '该 PDF 不包含任何页面。');

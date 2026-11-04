@@ -19,7 +19,7 @@ export function AppHeader({ theme, onToggleTheme, route }: AppHeaderProps) {
           <span className="grid size-8 place-items-center rounded-[10px] bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm">
             <Layers2 className="size-[18px]" />
           </span>
-          <div className="leading-tight">
+          <div className="hidden leading-tight sm:block">
             <div className="flex items-center gap-1.5">
               <span className="text-[15px] font-semibold tracking-tight">PDFJoiner</span>
               <Badge variant="outline" className="hidden h-[18px] px-1.5 text-[10px] sm:inline-flex">

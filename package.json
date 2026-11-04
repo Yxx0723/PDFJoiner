@@ -1,9 +1,9 @@
 {
   "name": "pdfjoiner-web",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.3.0",
   "type": "module",
-  "description": "浏览器端 PDF 工具：合并、图片转 PDF、拆分，全部在本地内存中处理",
+  "description": "浏览器端 PDF 工具：合并、图片转 PDF、拆分、页面旋转，全部在本地内存中处理",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "fixtures": "node scripts/make-fixtures.mjs",
-    "fixtures:images": "node scripts/make-image-fixtures.mjs"
+    "fixtures:images": "node scripts/make-image-fixtures.mjs",
+    "fixtures:rotate": "node scripts/make-rotate-fixture.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",

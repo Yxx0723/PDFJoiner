@@ -37,6 +37,12 @@ export const LIMITS = {
   maxSplitChunkSize: 200,
   /** Thumbnail width inside the split page grid. */
   splitThumbnailWidth: 132,
+
+  /* ---- PDF rotation ---- */
+  /** Thumbnail width inside the rotation page grid. */
+  rotateThumbnailWidth: 132,
+  /** Undo snapshots kept per document. */
+  rotateHistoryLimit: 60,
 } as const;
 
 export const THEME_STORAGE_KEY = 'pdfjoiner-theme';

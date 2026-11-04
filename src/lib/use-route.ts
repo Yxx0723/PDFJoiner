@@ -1,18 +1,18 @@
 /**
  * Tiny hash router.
  *
- * Three tools, one page each: `#/merge`, `#/images` and `#/split`. A hash
- * router keeps back/forward and deep links working without pulling in a routing
- * library for what is genuinely a three-screen app.
+ * Four tools, one page each: `#/merge`, `#/images`, `#/split` and `#/rotate`.
+ * A hash router keeps back/forward and deep links working without pulling in a
+ * routing library for what is genuinely a four-screen app.
  */
 
 import { useSyncExternalStore } from 'react';
 
-export type ToolRoute = 'merge' | 'images' | 'split';
+export type ToolRoute = 'merge' | 'images' | 'split' | 'rotate';
 
 const DEFAULT_ROUTE: ToolRoute = 'merge';
 
-const ROUTES: readonly ToolRoute[] = ['merge', 'images', 'split'];
+const ROUTES: readonly ToolRoute[] = ['merge', 'images', 'split', 'rotate'];
 
 export function parseRoute(hash: string): ToolRoute {
   const value = hash.replace(/^#\/?/, '').split(/[?#]/)[0];

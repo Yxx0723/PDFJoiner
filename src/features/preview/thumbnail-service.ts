@@ -77,8 +77,19 @@ export class ThumbnailService {
     return Math.min(Math.max(dpr, 1), 2);
   }
 
-  peek(fileId: string, pageNumber: number, targetWidth: number): Thumbnail | undefined {
-    const key = this.cacheKey(fileId, pageNumber, targetWidth);
+  /**
+   * `rotation` is a **final absolute** angle (0/90/180/270). PDF.js applies it
+   * through the viewport, so a rotated thumbnail is a real render — not a CSS
+   * transform of a stale bitmap. Omitting it keeps the source page's own
+   * `/Rotate`, which is what the merge/split tools expect.
+   */
+  peek(
+    fileId: string,
+    pageNumber: number,
+    targetWidth: number,
+    rotation?: number,
+  ): Thumbnail | undefined {
+    const key = this.cacheKey(fileId, pageNumber, targetWidth, rotation);
     const hit = this.cache.get(key);
     if (!hit) return undefined;
     // Refresh LRU position.
@@ -87,10 +98,16 @@ export class ThumbnailService {
     return hit;
   }
 
-  private cacheKey(fileId: string, pageNumber: number, targetWidth: number): string {
-    // Width is part of the key: the 104 px strip and the 720 px dialog must not
-    // evict each other's bitmaps.
-    return `${fileId}:${pageNumber}:${Math.round(targetWidth)}`;
+  private cacheKey(
+    fileId: string,
+    pageNumber: number,
+    targetWidth: number,
+    rotation?: number,
+  ): string {
+    // Width *and rotation* are part of the key: a page turned 90° must never
+    // reuse the bitmap rendered at 0°. The older tools pass no rotation and
+    // keep using the same key shape as before.
+    return `${fileId}:${pageNumber}:${Math.round(targetWidth)}:${rotation ?? 'auto'}`;
   }
 
   private remember(key: string, thumbnail: Thumbnail): void {
@@ -140,11 +157,12 @@ export class ThumbnailService {
     fileId: string,
     file: File,
     pageNumber: number,
+    rotation?: number,
   ): Promise<{ width: number; height: number } | null> {
     try {
       const page = await this.loadPage(fileId, file, pageNumber);
       if (!page) return null;
-      const viewport = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: 1, rotation });
       return { width: viewport.width, height: viewport.height };
     } catch {
       return null;
@@ -164,24 +182,25 @@ export class ThumbnailService {
     file: File,
     pageNumber: number,
     targetWidth: number,
+    rotation?: number,
   ): Promise<Thumbnail | null> {
-    const cached = this.peek(fileId, pageNumber, targetWidth);
+    const cached = this.peek(fileId, pageNumber, targetWidth, rotation);
     if (cached) return cached;
 
     await this.semaphore.acquire();
-    const key = this.cacheKey(fileId, pageNumber, targetWidth);
+    const key = this.cacheKey(fileId, pageNumber, targetWidth, rotation);
     try {
-      const again = this.peek(fileId, pageNumber, targetWidth);
+      const again = this.peek(fileId, pageNumber, targetWidth, rotation);
       if (again) return again;
 
       const page = await this.loadPage(fileId, file, pageNumber);
       if (!page) return null;
 
-      const thumbnail = await this.render(page, targetWidth);
+      const thumbnail = await this.render(page, targetWidth, rotation);
       this.remember(key, thumbnail);
       return thumbnail;
     } catch {
-      // A single broken page must not break the whole strip.
+      // A single broken page must not break the whole grid.
       return null;
     } finally {
       this.semaphore.release();
@@ -189,11 +208,15 @@ export class ThumbnailService {
   }
 
   /** Renders one page into a data URL. The canvas bitmap is released right away. */
-  private async render(page: PDFPageProxy, targetCssWidth: number): Promise<Thumbnail> {
-    const base = page.getViewport({ scale: 1 });
+  private async render(
+    page: PDFPageProxy,
+    targetCssWidth: number,
+    rotation?: number,
+  ): Promise<Thumbnail> {
+    const base = page.getViewport({ scale: 1, rotation });
     const ratio = this.pixelRatio;
     const scale = (targetCssWidth * ratio) / base.width;
-    const viewport = page.getViewport({ scale });
+    const viewport = page.getViewport({ scale, rotation });
 
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(viewport.width));
@@ -226,6 +249,14 @@ export class ThumbnailService {
       // "tab uses 2 GB of memory" reports.
       canvas.width = 1;
       canvas.height = 1;
+    }
+  }
+
+  /** Drops only one page's cached bitmaps, after that page is rotated. */
+  releasePage(fileId: string, pageNumber: number): void {
+    const prefix = `${fileId}:${pageNumber}:`;
+    for (const key of [...this.cache.keys()]) {
+      if (key.startsWith(prefix)) this.cache.delete(key);
     }
   }
 

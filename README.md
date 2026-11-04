@@ -1,18 +1,19 @@
 # PDFJoiner Web
 
-浏览器内运行的三个 PDF 工具：**合并 PDF**、**图片转 PDF**、**PDF 拆分**。打开网页即可使用：不用注册、不用安装，文件 **不会离开这台设备**——解析、预览、排版、拆分、导出全部在当前标签页里完成。
+浏览器内运行的四个 PDF 工具：**合并 PDF**、**图片转 PDF**、**PDF 拆分**、**PDF 页面旋转**。打开网页即可使用：不用注册、不用安装，文件 **不会离开这台设备**——解析、预览、排版、拆分、旋转、导出全部在当前标签页里完成。
 
-> 合并功能是同名桌面版（Python + PySide6）的 Web 重写。合并引擎、页码规则与错误语义参考了旧版实现，但前端与浏览器 PDF 处理链路是全新写的。图片转 PDF 与 PDF 拆分是同一个应用里追加的两个工具，共用设计系统、pdf.js 预览链路与 pdf-lib 依赖。
+> 合并功能是同名桌面版（Python + PySide6）的 Web 重写。合并引擎、页码规则与错误语义参考了旧版实现，但前端与浏览器 PDF 处理链路是全新写的。图片转 PDF、PDF 拆分与 PDF 页面旋转是同一个应用里陆续追加的三个工具，共用设计系统、pdf.js 预览链路与 pdf-lib 依赖。
 
-## 三个工具
+## 四个工具
 
-顶部导航切换，三个工具各自保留自己的文件与设置，互不影响：
+顶部导航切换，四个工具各自保留自己的文件与设置，互不影响：
 
 | 工具 | 路由 | 说明 |
 | --- | --- | --- |
 | PDF 合并 | `#/merge` | 多份 PDF 排序、选页，按页面对象合并，保留矢量内容 |
 | 图片转 PDF | `#/images` | 多张图片排序、旋转，按纸张与边距排版，每张一页 |
 | PDF 拆分 | `#/split` | 一份 PDF 按范围 / 选页 / 逐页 / 固定页数拆成多份，可打包 ZIP |
+| PDF 页面旋转 | `#/rotate` | 单页 / 选页 / 页码范围 / 全篇调整方向，可撤销重做，写入 `/Rotate` 而非转图片 |
 
 合并工作区（浅色）：
 
@@ -38,6 +39,18 @@ PDF 拆分工作区：左侧是文档卡片与页面网格，右侧是拆分设�
 
 ![拆分结果](docs/screenshots/17-split-result.png)
 
+PDF 页面旋转工作区：左侧是文档卡、工具条与页面网格，右侧是旋转范围、操作和导出。缩略图按**最终导出方向**由 PDF.js 重新渲染，每页都带角度标签与左转 / 右转 / 更多操作按钮。
+
+![PDF 旋转工作区](docs/screenshots/22-rotate-workspace.png)
+
+大图预览同样按最终方向渲染，并可在弹窗内直接旋转、缩放、翻页：
+
+![旋转预览](docs/screenshots/25-rotate-preview.png)
+
+导出结果会列出每页最终角度、体积、耗时与逐页校验状态，再一键下载新 PDF：
+
+![旋转结果](docs/screenshots/26-rotate-result.png)
+
 ## 快速开始
 
 ```bash
@@ -47,11 +60,12 @@ npm run dev          # 开发服务器 http://localhost:5173
 npm run build        # 类型检查 + 生产构建，输出 dist/
 npm run preview      # 本地预览 dist/（默认 4173 端口）
 
-npm run test         # 单元测试（Vitest，155 个）
-npm run test:e2e     # 端到端测试（Playwright，52 个用例 × 3 个内核）
+npm run test         # 单元测试（Vitest，220 个）
+npm run test:e2e     # 端到端测试（Playwright，71 个用例 × 3 个内核）
 npm run lint         # ESLint
 npm run fixtures     # 重新生成测试用 PDF 样本
 npm run fixtures:images  # 重新生成测试用图片样本（需要 Playwright 的 Chromium）
+npm run fixtures:rotate  # 重新生成旋转专用样本（6 页混合方向 + 600 页长文档）
 ```
 
 Node 版本要求：**>= 20**（开发时使用 22.22.2）。
@@ -163,6 +177,49 @@ npx playwright install chromium firefox webkit
 - 完成后逐个显示文件名、页数、体积，可单文件下载，也可打包成 ZIP
 - 每个输出都会重新解析一次做校验，校验不过就整体失败，绝不显示假成功
 
+## 功能：PDF 页面旋转（V1.3）
+
+**导入**
+- 点击选择、拖拽到页面任意位置，一次处理一份 PDF（单文件上限 200 MB）
+- 检查扩展名、空文件、文件头魔数；加密 PDF 与损坏文件在文档卡上直接说明原因
+- 导入时读取**每一页**的原始 `/Rotate`（不是只读前 60 页），页面自带旋转不会被覆盖
+- 随时「替换」或「移除」；替换会清理旧任务、旧缩略图与历史栈
+
+**页面网格**
+- 每页显示真实缩略图、页码、当前最终角度、选中状态、左转 / 右转 / 更多操作
+- 「更多操作」里有旋转 180°、恢复这一页的原始方向、放大预览
+- 一次最多挂载 60 张卡片，缩略图用 IntersectionObserver 按需渲染；单页渲染失败不影响其它页
+- 点击缩略图进入大图预览：可旋转、缩放 25%–300%、翻页、切换选中，关闭后状态保留
+
+**四种操作范围**
+
+| 范围 | 说明 |
+| --- | --- |
+| 当前页 | 大图预览正在看的那一页 |
+| 已选页面 | 在网格里勾选的页面，可全选 / 反选 / 清空 |
+| 全部页面 | 整份文档 |
+| 页码范围 | `1-5`、`1-3,6,9-12` 等；重复页码在一次操作里只转一次 |
+
+操作前明确显示「将影响 N 页」；范围写错时显示具体原因并禁用旋转按钮。角度一律归一化为 `0° / 90° / 180° / 270°`：
+
+```ts
+normalizedAngle = ((angle % 360) + 360) % 360
+finalRotation   = normalize(originalRotation + rotationDelta)
+```
+
+**历史与重置**
+- 撤销 / 重做（也可 `Ctrl/⌘ + Z`、`Ctrl/⌘ + Shift + Z`），历史栈最多 60 个快照
+- 「恢复原始方向」回到**导入时**的角度，而不是把所有页强制设为 0°
+- 任何一次编辑都会让上一次的导出结果失效，避免下载到过期文件
+
+**导出**
+- 默认文件名 `原文件名_rotated.pdf`，原始 `File` 对象始终只读
+- 在独立 Web Worker 里 `PDFDocument.load` → `page.setRotation(degrees(finalAngle))` → `save`
+- 只写角度发生变化的页面；内容流、MediaBox、文字、矢量图形、图片对象、页面顺序全部原样保留
+- 输出小于 64 MB 时重新解析，逐页核对角度、尺寸与内容流；不一致就整体失败，不提供下载
+- 真实分阶段进度（读取 / 应用 / 生成 / 校验 / 完成），按已处理页数统计，不做虚假百分比
+- 取消同时走「协作式检查点 + 强制终止 worker」，保证卡在 `save()` 里也不会产出半成品
+
 ## 技术栈
 
 | 层 | 选择 |
@@ -187,20 +244,22 @@ pdfjoiner-web/
 ├── index.html                    # 单页入口，含防主题闪烁的内联脚本
 ├── src/
 │   ├── main.tsx                  # 挂载、Promise.withResolvers 兜底、全局拖拽拦截
-│   ├── App.tsx                   # 路由分发（合并 / 图片 / 拆分）、布局骨架、通知
+│   ├── App.tsx                   # 路由分发（合并 / 图片 / 拆分 / 旋转）、布局骨架、通知
 │   ├── index.css                 # 设计令牌（HSL 变量）、层级与工具类
 │   ├── components/
 │   │   ├── ui/                   # button, badge, card, dialog, input, progress, tooltip
-│   │   ├── layout/               # app-header、app-footer、hero、tool-nav（工具切换）
+│   │   ├── layout/               # app-header、app-footer、hero、tool-nav（四个工具切换）
 │   │   ├── upload/               # drop-zone（PDF / 图片两种模式）
 │   │   ├── files/                # 【合并】file-list（dnd-kit）、file-card、range-editor
-│   │   ├── pages/                # 【合并】page-strip、page-thumb、page-preview-dialog
+│   │   ├── pages/                # 【公共】page-strip、page-thumb、page-preview-dialog（支持旋转适配）
 │   │   ├── merge/                # 【合并】merge-panel（汇总 / 进度 / 结果卡）
 │   │   ├── images/               # 【图片】网格、卡片、设置面板、版面预览、结果卡、结果 PDF 预览
 │   │   ├── split/                # 【拆分】文档卡、模式切换、范围编辑器、页面网格、设置、结果
+│   │   ├── rotate/               # 【旋转】空状态、文档卡、页面卡片、网格、工具条、设置、结果、编排
 │   │   ├── workspace.tsx         # 【合并】两栏布局编排
 │   │   ├── images/image-workspace.tsx  # 【图片】两栏布局编排
-│   │   └── split/split-workspace.tsx   # 【拆分】两栏布局编排 + 预览弹窗接线
+│   │   ├── split/split-workspace.tsx   # 【拆分】两栏布局编排 + 预览弹窗接线
+│   │   └── rotate/rotate-workspace.tsx # 【旋转】两栏布局编排 + 预览/旋转接线
 │   ├── features/
 │   │   ├── pdf/                  # 【合并】
 │   │   │   ├── engine.ts         #   纯函数层：inspect + merge（无 DOM 依赖，可在 Node 跑）
@@ -225,18 +284,27 @@ pdfjoiner-web/
 │   │   │   ├── client.ts         #   拆分 worker 的主线程 RPC、取消、生命周期
 │   │   │   ├── protocol.ts       #   主线程 ↔ 拆分 worker 的消息类型
 │   │   │   └── zip.ts            #   JSZip 打包（STORE，按需动态加载）
-│   │   ├── page-range/           # 【合并】【拆分】页码解析与格式化
-│   │   └── preview/thumbnail-service.ts  # pdf.js 文档缓存、渲染信号量、LRU
+│   │   ├── pdf-rotate/           # 【旋转】
+│   │   │   ├── types.ts          #   角度、范围、进度、结果、检查结果的共享类型
+│   │   │   ├── rotation.ts       #   纯函数：归一化、finalRotation、批量/重置、导出计划
+│   │   │   ├── history.ts        #   纯函数：撤销/重做快照栈（上限 60）
+│   │   │   ├── engine.ts         #   一次解析读全量 /Rotate；setRotation + save + 逐页校验
+│   │   │   ├── client.ts         #   主线程 RPC、协作取消 + 强制终止、worker 生命周期
+│   │   │   └── protocol.ts       #   主线程 ↔ 旋转 worker 的消息类型
+│   │   ├── page-range/           # 【合并】【拆分】【旋转】页码解析与格式化
+│   │   └── preview/thumbnail-service.ts  # pdf.js 文档缓存、按最终角度渲染、LRU、单页缓存失效
 │   ├── store/
 │   │   ├── use-app-store.ts      # 【合并】文件、选择、合并状态
 │   │   ├── use-image-store.ts    # 【图片】图片、设置、生成状态、对象 URL 生命周期
 │   │   ├── use-split-store.ts    # 【拆分】文档、设置、选择、构建状态
+│   │   ├── use-rotate-store.ts   # 【旋转】文档、delta 历史、范围、选择、导出状态、任务令牌
 │   │   └── selectors.ts          # 【合并】汇总、门禁、结构风险提示
 │   ├── hooks/                    # use-theme, use-file-drop, use-in-view
 │   ├── workers/
 │   │   ├── pdf.worker.ts         # 【合并】合并与解析 worker
 │   │   ├── image.worker.ts       # 【图片】解码 + OffscreenCanvas 编码 + 组装
-│   │   └── split.worker.ts       # 【拆分】拆分 worker
+│   │   ├── split.worker.ts       # 【拆分】拆分 worker
+│   │   └── rotate.worker.ts      # 【旋转】读取全量角度 + 旋转导出 worker
 │   └── lib/                      # utils、constants（上限与阈值）、use-route（hash 路由）
 ├── public/
 │   ├── pdfjs/cmaps/              # 1.6 MB，避免向 CDN 请求中文字体映射
@@ -245,15 +313,17 @@ pdfjoiner-web/
 ├── scripts/
 │   ├── make-fixtures.mjs         # 用 pdf-lib 生成 PDF 测试样本
 │   ├── make-fixtures-pypdf.py    # 用 pypdf 生成加密 / 书签 / 注释样本
-│   └── make-image-fixtures.mjs   # 用 Chromium 编码 JPG/PNG/WebP，并手写 BMP/GIF 样本
+│   ├── make-image-fixtures.mjs   # 用 Chromium 编码 JPG/PNG/WebP，并手写 BMP/GIF 样本
+│   └── make-rotate-fixture.mjs   # 用 pdf-lib 生成 6 页混合方向 + 600 页长文档样本
 ├── tests/
-│   ├── unit/                     # 10 个测试文件 + PDF 内容流 / PNG 生成辅助
+│   ├── unit/                     # 14 个测试文件 + PDF 内容流 / PNG 生成辅助
 │   ├── e2e/
 │   │   ├── app.spec.ts           # 【合并】15 个用例
 │   │   ├── images.spec.ts        # 【图片】20 个用例
-│   │   └── split.spec.ts         # 【拆分】17 个用例
+│   │   ├── split.spec.ts         # 【拆分】17 个用例
+│   │   └── rotate.spec.ts        # 【旋转】19 个用例
 │   └── fixtures/
-│       ├── *.pdf                 # 样本（含加密 / 损坏 / 10 页 / 100 页 / 300 页）
+│       ├── *.pdf                 # 样本（含加密 / 损坏 / 10 页 / 100 页 / 300 页 / 旋转 600 页）
 │       └── images/               # 图片样本（含透明 PNG / 大图 / 损坏 / 非图片）
 ├── docs/screenshots/             # 实际运行截图（由 e2e 用例生成）
 ├── dist/                         # 构建产物（npm run build 生成）
@@ -264,6 +334,54 @@ pdfjoiner-web/
 ```
 
 ## 本次新增与修改的文件
+
+### V1.3 — PDF 页面旋转
+
+在现有工程内增量扩展：没有新建项目、没有替换技术栈、没有改动合并 / 图片 / 拆分三条链路的业务行为。开发在 `main` 上进行（按项目 Git 规范不使用功能分支）。
+
+**新增（24 个源码 / 测试 / 样本文件，另有验收报告与 8 张截图）**
+
+| 路径 | 作用 |
+| --- | --- |
+| `src/features/pdf-rotate/types.ts` | 角度 / 范围 / 进度 / 输出 / 检查结果的共享类型 |
+| `src/features/pdf-rotate/rotation.ts` | 纯函数：角度归一化、`finalRotation`、批量与重置、导出计划 |
+| `src/features/pdf-rotate/history.ts` | 纯函数：撤销 / 重做快照栈 |
+| `src/features/pdf-rotate/engine.ts` | 读全量 `/Rotate`、`setRotation`、`save`、输出逐页校验、取消检查点 |
+| `src/features/pdf-rotate/protocol.ts` | 主线程 ↔ 旋转 worker 的消息类型 |
+| `src/features/pdf-rotate/client.ts` | 主线程 RPC、协作取消 + 强制终止、worker 生命周期 |
+| `src/workers/rotate.worker.ts` | 独立的旋转 worker |
+| `src/store/use-rotate-store.ts` | delta 单一真相、范围解析、选择、历史、导出任务与令牌 |
+| `src/components/rotate/rotate-workspace.tsx` | 两栏编排、预览弹窗接线、快捷键、移动端底栏 |
+| `src/components/rotate/rotate-hero.tsx` | 空状态与拖拽上传 |
+| `src/components/rotate/rotate-upload.tsx` | 文档卡（名称 / 大小 / 页数 / 原生旋转提示 / 结构风险） |
+| `src/components/rotate/rotate-page-card.tsx` | 单页卡片（按最终角度渲染、选中、左右转、更多操作） |
+| `src/components/rotate/rotate-page-grid.tsx` | 分批挂载的页面网格 |
+| `src/components/rotate/rotate-toolbar.tsx` | 选择、统计、撤销 / 重做 |
+| `src/components/rotate/rotate-settings.tsx` | 范围选择、页码输入、批量旋转、导出 |
+| `src/components/rotate/rotate-result.tsx` | 进度、成功 / 失败 / 取消、下载 |
+| `tests/unit/rotate-rotation.test.ts` | 18 个：角度表、批量 / 重置 / 导出计划、撤销重做栈 |
+| `tests/unit/rotate-engine.test.ts` | 18 个：字节级 `/Rotate`、内容 / 尺寸 / 页序、异常、进度、取消、校验 |
+| `tests/unit/rotate-pdfjs.test.ts` | 3 个：用 PDF.js 独立复核角度、viewport 换向、文本与页序 |
+| `tests/unit/rotate-store.test.ts` | 26 个：导入 / 范围 / 选择 / 编辑 / 历史 / 导出 / 竞态 / 清理 |
+| `tests/e2e/rotate.spec.ts` | 19 个：真实浏览器全流程、下载文件复核、隐私与响应式、截图 |
+| `scripts/make-rotate-fixture.mjs`、`tests/fixtures/rotate-mixed.pdf`、`tests/fixtures/rotate-large.pdf` | 旋转专用样本与生成脚本 |
+
+**修改（10 个代码 / 文档文件 + 20 张既有截图重生成，均为最小改动）**
+
+| 路径 | 改动 |
+| --- | --- |
+| `src/lib/use-route.ts` | `ToolRoute` 增加 `rotate`，路由表四项 |
+| `src/components/layout/tool-nav.tsx` | 增加「PDF 旋转」导航项；小屏内边距收紧以容纳第四个入口 |
+| `src/components/layout/app-header.tsx` | 小屏隐藏 logo 文字，避免四个导航项造成横向溢出 |
+| `src/App.tsx` | 四路分发、第四路资源释放与 `beforeunload` 保护 |
+| `src/lib/constants.ts` | `rotateThumbnailWidth`、`rotateHistoryLimit` |
+| `src/features/pdf/engine.ts` | 抽出 `inspectDocument(doc)`（原逻辑不变），让旋转 worker 一次解析即可同时拿到全量角度与检查信息 |
+| `src/features/preview/thumbnail-service.ts` | `getThumbnail` / `getPageSize` / `peek` 增加可选最终角度，缓存键包含角度，新增 `releasePage()`；不传角度时行为与旧版一致 |
+| `src/components/pages/page-preview-dialog.tsx` | 新增可选 `rotation` 适配器（按最终角度渲染、显示角度、弹窗内旋转）；不传时行为与旧版一致 |
+| `index.html`、`package.json` | 标题 / 描述 / 版本号、`fixtures:rotate` 脚本 |
+| `docs/screenshots/01`–`20`（20 张 PNG） | 顶部导航新增第四项后，全量 e2e 的截图用例在 Chromium 中重新生成既有截图，保证文档与当前 UI 一致；不是手工修改 |
+
+`README.md` 与 `docs/V1.3-验收报告.md` 同步更新。截图 `21`–`28` 由 e2e 截图用例在真实 Chromium 中生成。
 
 ### V1.2 — PDF 拆分
 
@@ -562,6 +680,53 @@ for (const job of jobs) {
 
 PDF 内部的对象流本来就是压缩过的，再 deflate 一遍通常只省 1–2%，却要在主线程消耗可观 CPU。所以 ZIP 以 `compression: 'STORE'` 打包：解出来的字节与单独下载的文件**完全一致**，这也让端到端测试可以用 JSZip 解包后直接解析 PDF 来核对。JSZip 本身是 `await import()` 的，不进首屏包。
 
+## 工作原理：PDF 旋转
+
+### 1. 三个角度，一套公式
+
+必须区分源 PDF 已有的 `/Rotate`、用户本次增加的 delta、以及最终写进文件的绝对角度。混淆它们会让「原本就旋转 90° 的页」被误设成 90°，等于什么都没做。
+
+```text
+original  = 源 PDF 第 i 页的 /Rotate        （导入时逐页读取）
+delta     = 用户在本次会话中累加的角度      （历史栈里存的就是它）
+final     = normalize(original + delta)     （缩略图、弹窗、导出共用）
+```
+
+`normalize` 用 `((angle % 360) + 360) % 360`，配合 `0/90/180/270` 白名单，界面上永远不可能出现 360° 或 450°。`rotation.ts` 是无 DOM、无 pdf-lib 依赖的纯函数，因此角度表可以直接单测。
+
+### 2. 只写 /Rotate，不碰内容
+
+```ts
+const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+const pages = doc.getPages();
+for (const { pageIndex, finalAngle } of jobs) {
+  if (finalAngle !== originals[pageIndex]) {
+    pages[pageIndex].setRotation(degrees(finalAngle));
+  }
+}
+const produced = await doc.save({ useObjectStreams: true, addDefaultPage: false });
+```
+
+没有 `drawPage`、没有 canvas、没有 PNG/JPEG 中间产物。内容流、文字、矢量图形、图片 XObject、MediaBox、页面顺序全部原样保留；90° / 270° 在阅读器里显示的宽高会互换，但 **MediaBox 不被改写**，这是 PDF 规范里 `/Rotate` 的语义。引擎在写出前先校验整个计划（越界索引、非法角度一律拒绝），只写角度真正变化的页。
+
+### 3. 预览是真渲染，不是 CSS 转图
+
+`thumbnail-service.ts` 的 `getThumbnail(..., rotation)` 把**最终绝对角度**传给 PDF.js 的 `getViewport({ scale, rotation })`，由 PDF.js 生成旋转后的位图。缓存键是 `文档 ID : 页码 : 宽度 : 角度`，所以旋转后不会命中旧位图；`releasePage()` 只清掉这一页的旧缓存，不必整份文档重渲。
+
+端到端测试直接断言 `<img>` 的 `naturalWidth / naturalHeight` 在旋转 90° 后发生换向——纯 CSS `transform` 是做不到的。共享的大图预览弹窗通过可选的 `rotation` 适配器接同一套角度，支持在弹窗内左转 / 右转 / 还原；合并、拆分、图片工具不传该适配器，行为与 V1.2 完全一致。
+
+### 4. Worker、取消与校验
+
+文件字节经 transfer 列表**转移**给独立 worker，结果原路转回；任何时刻只有一个任务，任务结束后销毁 worker 释放 pdf-lib 内存。
+
+进度按真实处理页数分五阶段上报（读取 / 应用 / 生成 / 校验 / 完成）。取消有两条腿：`shouldCancel()` 在每 25 页的检查点生效；客户端同时 `terminate()` worker，因为 pdf-lib 的 `save()` 是同步的，卡在里面时收不到新消息。取消后状态明确标为「已取消」且没有可下载文件。
+
+输出小于 64 MB 时重新 `PDFDocument.load`，逐页比对角度、MediaBox 尺寸与内容流是否存在；不一致就整体失败。单测还用 **PDF.js**（另一套解析器）重新打开输出，核对 `page.rotate`、viewport 换向、文字与页序，避免「只有写入方能读」的假通过。
+
+### 5. 状态分层与失效
+
+`use-rotate-store.ts` 里唯一的旋转真相是 `history.entries[history.index]`（delta 数组）。组件不各自保存角度；`finalAnglesOf()` 从 delta 与 `originalRotations` 派生，网格、弹窗和导出任务读的是同一个数组。每次编辑都会：推进历史 → 只失效受影响页的缩略图 → 清空上一次导出结果 → 递增任务令牌，因此晚到的 worker 结果无法覆盖新状态。
+
 ## 页码语法
 
 页码从 1 开始，输出顺序与输入顺序完全一致。
@@ -583,7 +748,7 @@ PDF 内部的对象流本来就是压缩过的，再 deflate 一遍通常只省 
 
 | 承诺 | 代码依据 |
 | --- | --- |
-| 文件不上传 | `src/` 内不存在 `fetch` / `XMLHttpRequest` / `sendBeacon` / `WebSocket` / `EventSource`（可用 `grep -rn "fetch(" src/` 复核）；合并、图片、拆分三条链路各有一个 e2e 用例在真实浏览器里断言「只有同源 GET」，图片侧的用例还会先打开 PDF.js 预览，把静态资源请求也纳入审计 |
+| 文件不上传 | `src/` 内不存在 `fetch` / `XMLHttpRequest` / `sendBeacon` / `WebSocket` / `EventSource`（可用 `grep -rn "fetch(" src/` 复核）；合并、图片、拆分、旋转四条链路各有一个 e2e 用例在真实浏览器里断言「只有同源 GET」，图片侧与旋转侧的用例还会先打开 PDF.js 预览，把静态资源请求也纳入审计 |
 | 不接第三方 | 没有分析脚本、没有 CDN、没有 Web 字体；pdf.js 的 cMaps 与标准字体自托管在 `public/pdfjs/` |
 | 不需要注册 | 无账号系统、无 localStorage 用户标识，只存一个主题偏好 |
 | 不收集内容 | 没有日志上报；`src/` 内没有任何 `console.*` |
@@ -597,7 +762,7 @@ PDF 内部的对象流本来就是压缩过的，再 deflate 一遍通常只省 
 
 ## 测试
 
-### 单元测试（Vitest，155 个）
+### 单元测试（Vitest，220 个）
 
 ```bash
 npm run test
@@ -615,6 +780,10 @@ npm run test
 | `split-plan.test.ts` | 四模式输出清单与命名、范围重叠、越界、倒序、空范围、未覆盖页提示、提取顺序与去重、10 页/23 页/100 页、超出输出上限 |
 | `split-engine.test.ts` | 单页 PDF、3 页 → 3 个单页文件、范围页数 3/4/3、倒序页序、重复页、页面框与横向保留、矢量内容、每个输出的标题、100 页 → 100 个文件、进度单调性、取消、加密/损坏/越界/空计划，以及注释保留 / 书签丢失 / 表单丢失三项实测 |
 | `split-pdfjs.test.ts` | 用 **PDF.js** 重新打开每个拆分结果，核对页数、页序（按页面上的 `T-n` 标签）、页面内容与页面尺寸 |
+| `rotate-rotation.test.ts` | 角度表（含 `270+90=0`、`0-90=270`）、非法角度、归一化、单页/多页/重复/越界、批量计划保留原始旋转、历史栈撤销重做与上限 |
+| `rotate-engine.test.ts` | 全量页角度读取（超过 60 页采样上限）、单页/多页/原生旋转页、横向与混合方向、页序/文本算子/MediaBox 保留、源文件字节不变、书签与注释实测、加密/损坏/空文档/越界/非法角度、真实进度、取消、跳过校验时如实标记 |
+| `rotate-pdfjs.test.ts` | 用 **PDF.js** 复核 `page.rotate`、90° 后 viewport 宽高互换、文字与页序、100 页逐页角度 |
+| `rotate-store.test.ts` | 导入校验与竞态、四种范围解析、选择与反选、批量旋转、撤销重做、重置回到导入方向、单页缓存失效、结果失效、导出计划、取消与失败、清理与命名 |
 
 引擎测试直接读取 `tests/fixtures/` 下的真实 PDF，并通过解压内容流断言「文字仍是文字」：
 
@@ -623,7 +792,7 @@ expect(pageHasTextOperators(page, doc)).toBe(true);   // 内容流里有 BT / Tj
 expect(imageXObjectNames(page, doc)).toEqual([]);     // 页面资源里没有图片 XObject
 ```
 
-### 端到端测试（Playwright，52 个用例）
+### 端到端测试（Playwright，71 个用例）
 
 ```bash
 npm run test:e2e                                    # 三个浏览器全跑
@@ -638,17 +807,19 @@ npx playwright test --project=chromium              # 只跑 Chromium
 
 **PDF 拆分（`split.spec.ts`，17 个）**：三工具导航互通、载入后页数与缩略图、加密/损坏/伪装 PDF 的拒绝、默认两段拆分、增删范围行、重叠阻止拆分、越界行内提示、提取模式点选与输入同步且保持顺序、全选/反选/清空、逐页拆分 10 个文件编号连续、固定页数（最后一份不足）、100 页按 25 页拆、**ZIP 解包后解析其中一份 PDF**、取消不产出结果、同源 GET 审计、手机尺寸全流程、截图。
 
-三侧都做了「下载真实文件 → 重新解析 → 断言页数 / 页面尺寸 / 嵌入图片像素 / 内容流 / 页面文字」的闭环，而不是只检查界面文案。拆分还额外用 PDF.js 独立复核，避免「只有写入方能读」的假通过。
+**PDF 旋转（`rotate.spec.ts`，19 个）**：四工具导航互通、载入后页数与原生旋转徽章、缩略图真实渲染、**旋转 90° 后 `<img>` 的 `naturalWidth/Height` 确实换向**（证明不是 CSS 转图）、单页左右转 / 180° / 恢复、选页批量、页码范围（重复页只转一次）、非法范围、全部旋转、撤销重做、重置回到导入方向、**下载真实文件并用 pdf-lib 逐页复核 `/Rotate` / 页序 / 文本算子 / MediaBox / 源文件不变**、书签与注释样本、取消不产出半成品、600 页分批渲染、大图预览旋转与缩放、加密 / 损坏 / 伪装文件反馈、同源 GET 审计、手机尺寸、截图。
+
+四个工具都做了「下载真实文件 → 重新解析 → 断言页数 / 页面尺寸 / 内容流 / 页面文字 / 旋转角度」的闭环，而不是只检查界面文案。拆分与旋转还额外用 PDF.js 独立复核，避免「只有写入方能读」的假通过。
 
 ### 浏览器验证矩阵
 
-完整回归 `npx playwright test`：**150 通过 / 6 跳过**（跳过的是三个「界面截图」用例，按设计只在 Chromium 生成一次截图）。
+完整回归 `npx playwright test`：**205 通过 / 8 跳过**（跳过的是四个「界面截图」用例，按设计只在 Chromium 各生成一次截图）。
 
 | 浏览器 | 实际内核（Playwright 1.64.1） | 结果 |
 | --- | --- | --- |
-| Chrome / Chromium | Chromium 156.0.8078.4 | 52/52 通过 |
-| Firefox | Firefox 157.0 | 49/49 通过（3 个截图用例跳过） |
-| Safari（WebKit 内核） | WebKit 27.2 | 49/49 通过（3 个截图用例跳过） |
+| Chrome / Chromium | Chromium 156.0.8078.4 | 71/71 通过 |
+| Firefox | Firefox 157.0 | 67/67 通过（4 个截图用例跳过） |
+| Safari（WebKit 内核） | WebKit 27.2 | 67/67 通过（4 个截图用例跳过） |
 | Microsoft Edge | 与 Chromium 同内核 | **未验证**：没有在真实 Edge 中运行过，只覆盖了同内核的 Chromium |
 | iOS Safari | — | **未验证**：没有真机环境 |
 
@@ -744,7 +915,32 @@ location / {
 | 数字签名 | 失效 | 输出是重新序列化的新文档，签名覆盖范围必然改变。**未单独跑签名样本**，结论来自 PDF 规范而非本项目实测 |
 | 附件、文档级 JavaScript、页面标签 | 视为丢失 | 均为 catalog 级结构，`copyPages` 不会带走。**未单独实测** |
 
+**能力边界：PDF 页面旋转（V1.3）**
+
+| 项 | 现状 | 原因 / 验证方式 |
+| --- | --- | --- |
+| 加密 PDF | 明确拒绝，提示先解密 | 与其余工具一致，项目内不存在 `ignoreEncryption` |
+| 源 PDF 带非 90° 倍数的 `/Rotate` | 明确拒绝导入 | PDF 规范只允许四分之一圈；单元测试手工写入 `/Rotate 45` 实测会报 `invalid-pdf` |
+| 页面内容、尺寸、页序、矢量文字 | 保留 | 单测断言 `BT/Tj` 文本算子、MediaBox 与源逐页相等；e2e 下载真实文件后复核 |
+| 页面注释 | 保留（已实测） | `outlined-annotated.pdf` 旋转后 `/Annots` 仍在 |
+| 文档书签（Outlines） | 保留（已实测） | 旋转是在**原文档上**改页面字典再保存，不新建文档，因此 catalog 级结构不像拆分那样丢失；e2e 断言 `/Outlines` 仍存在 |
+| 交互表单、附件、文档级 JavaScript、页面标签 | **不承诺保留** | 理论上仍在原文档里，但**没有单独样本实测**；界面只对签名、表单、书签给出提示 |
+| 数字签名 | 重新保存后失效，界面与文档卡提前提示 | 签名覆盖范围改变是 PDF 规范层面的结果；**未单独跑签名样本**，结论来自规范而非本项目实测 |
+| 一次任务 | 1 份 PDF、最多 200 MB | 纯内存方案边界 |
+| 撤销栈 | 最多 60 个快照 | 更长历史会按最旧优先丢弃，当前状态始终保留 |
+| 缩略图网格 | 一次挂载 60 张卡片，按需追加 | 600 页文档有 e2e 用例验证分批与懒渲染 |
+| 输出二次校验 | 小于 64 MB 才重新解析逐页核对；超过则**明确标注未校验** | 避免超大文件翻倍占用内存；与合并 / 拆分策略一致 |
+| 取消 | 批次边界 + 强制终止 worker | `save()` 同步执行期间协作式取消来不及，客户端会直接销毁 worker |
+
 **实现取舍**
+
+- 旋转写的是 `/Rotate`，**不改 MediaBox**：阅读器显示宽高在 90°/270° 时互换，但页面框不变。若下游工具要求物理尺寸也被交换，本工具不满足该需求。
+- 缩略图与大图预览都按最终角度重新向 PDF.js 请求位图；旋转一次会重新渲染该页（有极短暂 loading），缓存按「文档 + 页 + 宽度 + 角度」隔离，单页旋转不影响其它页。
+- 大图预览的旋转按钮是可选适配器，只有旋转工具启用；合并 / 拆分 / 图片工具的预览行为未改变。
+- e2e 的取消用例在页面里延迟 `rotate` 消息投递，让取消按钮可稳定点击；引擎与客户端的取消逻辑另由单元测试直接验证，没有修改产品代码。
+- 输出文件名固定为 `原名_rotated.pdf`，不提供自定义命名（与拆分不同）。
+
+**未验证项（如实标注）**
 
 - 输出小于 64 MB 才做二次校验，更大的文件跳过校验并在界面明确标注。
 - 取消在批次边界生效（每 25 页或每个文件），单个超大文件内部不会立即中断。
@@ -769,6 +965,11 @@ location / {
 - CMYK / 16-bit / 渐进式 JPEG 的「原字节被 pdf-lib 拒绝 → 自动重编码」分支：单元测试用一个截断的 PNG 覆盖了回退逻辑，但没有真实 CMYK 样本。
 - 表单字段「外观是否完整保留」只验证了字段不再可交互，未逐像素比对。
 - 超过 100 MB 的单文件：仅按代码路径推断，未做实际压测。
+- 旋转后的数字签名、交互表单可编辑性、附件、文档级 JavaScript、页面标签：**没有单独样本实测**，README 只写了规范层面的结论与已实测的书签 / 注释结果。
+- 超过 64 MB 的旋转输出：「跳过二次解析校验」分支由单测的 `verifyBelowBytes: 1` 覆盖，未用真实大文件压测。
+- 真实 Edge、桌面 Safari 与 iOS Safari 上的旋转功能：只有 Playwright 三内核（含 WebKit）结果，无真机验证。
+- 中文 / 复杂字体 PDF 的旋转预览：样本均为内置 Helvetica；cMaps 已自托管但未做逐页比对。
+- 600 页以上文档、以及 200 MB 接近上限的 PDF 的旋转导出耗时与内存峰值：未做压测。
 
 ## 与旧版桌面版的关系
 

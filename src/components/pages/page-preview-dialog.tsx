@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, Loader2, Maximize2, Minus, Plus } from 'lucide-react';
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Maximize2,
+  Minus,
+  Plus,
+  RotateCcw,
+  RotateCw,
+} from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,6 +46,17 @@ export interface PreviewSelectionAdapter {
   note?: string;
 }
 
+/**
+ * Lets the rotation tool drive the preview's angle from its store.
+ * `getAngle` returns the **final absolute** angle, so the dialog renders the
+ * exact orientation that will be written to the exported PDF.
+ */
+export interface PreviewRotationAdapter {
+  getAngle: (pageIndex: number) => number;
+  rotate: (pageIndex: number, delta: number) => void;
+  reset: (pageIndex: number) => void;
+}
+
 export interface PagePreviewDialogProps {
   entry: PreviewDocument;
   /** 1-based page number, or `null` when closed. */
@@ -44,6 +65,8 @@ export interface PagePreviewDialogProps {
   onClose: () => void;
   /** Overrides the merge selection semantics. */
   selection?: PreviewSelectionAdapter;
+  /** Optional rotation controls; omitted by merge / split / images. */
+  rotation?: PreviewRotationAdapter;
 }
 
 /** CSS pixels per PDF point at 100% (96 dpi, the usual on-screen convention). */
@@ -65,19 +88,29 @@ function toMillimetres(points: number): number {
 }
 
 /**
- * Loads the bitmap for the requested width while keeping the previous frame on
- * screen, so raising the zoom does not flash a blank canvas.
+ * Loads the bitmap for the requested width **and rotation** while keeping the
+ * previous frame on screen, so raising the zoom does not flash a blank canvas.
+ * A frame from a different angle is never shown as if it were current.
  */
-function usePageImage(entry: PreviewDocument, page: number | null, width: number) {
-  const [frame, setFrame] = useState<{ page: number; thumb: Thumbnail } | null>(null);
+function usePageImage(
+  entry: PreviewDocument,
+  page: number | null,
+  width: number,
+  rotation?: number,
+) {
+  const [frame, setFrame] = useState<{
+    page: number;
+    rotation?: number;
+    thumb: Thumbnail;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (page === null) return;
 
-    const cached = thumbnailService.peek(entry.id, page, width);
+    const cached = thumbnailService.peek(entry.id, page, width, rotation);
     if (cached) {
-      setFrame({ page, thumb: cached });
+      setFrame({ page, rotation, thumb: cached });
       setLoading(false);
       return;
     }
@@ -85,10 +118,10 @@ function usePageImage(entry: PreviewDocument, page: number | null, width: number
     let alive = true;
     setLoading(true);
     thumbnailService
-      .getThumbnail(entry.id, entry.file, page, width)
+      .getThumbnail(entry.id, entry.file, page, width, rotation)
       .then((result) => {
         if (!alive) return;
-        if (result) setFrame({ page, thumb: result });
+        if (result) setFrame({ page, rotation, thumb: result });
         setLoading(false);
       })
       .catch(() => {
@@ -98,9 +131,10 @@ function usePageImage(entry: PreviewDocument, page: number | null, width: number
     return () => {
       alive = false;
     };
-  }, [entry.id, entry.file, page, width]);
+  }, [entry.id, entry.file, page, width, rotation]);
 
-  const visible = frame && frame.page === page ? frame.thumb : null;
+  const visible =
+    frame && frame.page === page && frame.rotation === rotation ? frame.thumb : null;
   return { thumb: visible, loading };
 }
 
@@ -110,10 +144,12 @@ export function PagePreviewDialog({
   onPageChange,
   onClose,
   selection,
+  rotation,
 }: PagePreviewDialogProps) {
   const togglePage = useAppStore((state) => state.togglePage);
   const storeFiles = useAppStore((state) => state.files);
   const open = page !== null;
+  const previewAngle = page !== null ? rotation?.getAngle(page - 1) : undefined;
 
   // Only used when no adapter is supplied, i.e. by the merge tool.
   const storeSelection = useMemo(() => {
@@ -145,10 +181,11 @@ export function PagePreviewDialog({
     if (page === null) return;
 
     // Paint something sensible immediately, then refine with the real page box
-    // from pdf.js (which also accounts for pages the import did not sample).
+    // from pdf.js (which also accounts for the pending rotation).
     const known = entry.inspection?.pageSizes[page - 1];
     if (known) {
-      const rotated = Math.abs(known.rotation) % 180 === 90;
+      const effective = previewAngle ?? known.rotation;
+      const rotated = Math.abs(effective) % 180 === 90;
       setPageSize(
         rotated
           ? { width: known.height, height: known.width }
@@ -157,14 +194,14 @@ export function PagePreviewDialog({
     }
 
     let alive = true;
-    void thumbnailService.getPageSize(entry.id, entry.file, page).then((size) => {
+    void thumbnailService.getPageSize(entry.id, entry.file, page, previewAngle).then((size) => {
       if (alive && size) setPageSize(size);
     });
 
     return () => {
       alive = false;
     };
-  }, [page, entry.id, entry.file, entry.inspection]);
+  }, [page, entry.id, entry.file, entry.inspection, previewAngle]);
 
   const pageWidthPt = pageSize?.width ?? A4.width;
   const pageHeightPt = pageSize?.height ?? A4.height;
@@ -216,7 +253,7 @@ export function PagePreviewDialog({
     return () => window.clearTimeout(timer);
   }, [renderWidth]);
 
-  const { thumb, loading } = usePageImage(entry, page, requestWidth);
+  const { thumb, loading } = usePageImage(entry, page, requestWidth, previewAngle);
 
   const applyScale = useCallback(
     (next: number, anchor?: { x: number; y: number }) => {
@@ -381,6 +418,12 @@ export function PagePreviewDialog({
           } else if (event.key === '0') {
             event.preventDefault();
             resetToFit();
+          } else if (event.key === '[' && rotation && page !== null) {
+            event.preventDefault();
+            rotation.rotate(page - 1, -90);
+          } else if (event.key === ']' && rotation && page !== null) {
+            event.preventDefault();
+            rotation.rotate(page - 1, 90);
           }
         }}
       >
@@ -393,7 +436,12 @@ export function PagePreviewDialog({
           {size && (
             <Badge variant="muted" className="tabular-nums">
               {toMillimetres(size.width)} × {toMillimetres(size.height)} mm
-              {size.rotation ? ` · 旋转 ${size.rotation}°` : ''}
+              {!rotation && size.rotation ? ` · 旋转 ${size.rotation}°` : ''}
+            </Badge>
+          )}
+          {rotation && previewAngle !== undefined && (
+            <Badge variant="soft" data-testid="preview-rotation-angle" className="tabular-nums">
+              当前 {previewAngle}°
             </Badge>
           )}
           {included ? (
@@ -527,34 +575,73 @@ export function PagePreviewDialog({
             {selection?.note ??
               '双击切换适应窗口 / 100% · ⌘/Ctrl + 滚轮缩放 · ← → 翻页 · 合并时使用原始矢量页面'}
           </p>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => go(-1)} disabled={(page ?? 1) <= 1}>
-              上一页
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => go(1)}
-              disabled={(page ?? 1) >= entry.pageCount}
-            >
-              下一页
-            </Button>
-            {!selection?.hideToggle && (
-              <Button
-                variant={included ? 'secondary' : 'default'}
-                size="sm"
-                data-testid="preview-toggle-inclusion"
-                onClick={() => {
-                  if (page === null) return;
-                  if (selection) selection.toggle(page - 1);
-                  else togglePage(entry.id, page - 1);
-                }}
-              >
-                {included
-                  ? (selection?.toggleRemoveLabel ?? '从合并中排除')
-                  : (selection?.toggleAddLabel ?? '加入合并')}
-              </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {rotation && page !== null && (
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="preview-rotate-left"
+                  aria-label="向左旋转 90°"
+                  title="向左旋转 90°（[）"
+                  onClick={() => rotation.rotate(page - 1, -90)}
+                  className="gap-1.5"
+                >
+                  <RotateCcw />
+                  左转
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="preview-rotate-right"
+                  aria-label="向右旋转 90°"
+                  title="向右旋转 90°（]）"
+                  onClick={() => rotation.rotate(page - 1, 90)}
+                  className="gap-1.5"
+                >
+                  <RotateCw />
+                  右转
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="preview-rotate-reset"
+                  title="恢复这一页的原始方向"
+                  onClick={() => rotation.reset(page - 1)}
+                >
+                  还原
+                </Button>
+              </div>
             )}
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => go(-1)} disabled={(page ?? 1) <= 1}>
+                上一页
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => go(1)}
+                disabled={(page ?? 1) >= entry.pageCount}
+              >
+                下一页
+              </Button>
+              {!selection?.hideToggle && (
+                <Button
+                  variant={included ? 'secondary' : 'default'}
+                  size="sm"
+                  data-testid="preview-toggle-inclusion"
+                  onClick={() => {
+                    if (page === null) return;
+                    if (selection) selection.toggle(page - 1);
+                    else togglePage(entry.id, page - 1);
+                  }}
+                >
+                  {included
+                    ? (selection?.toggleRemoveLabel ?? '从合并中排除')
+                    : (selection?.toggleAddLabel ?? '加入合并')}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </DialogContent>
