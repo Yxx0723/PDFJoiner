@@ -6,16 +6,44 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { LIMITS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import type { PdfInspection } from '@/features/pdf/engine';
 import { thumbnailService, type Thumbnail } from '@/features/preview/thumbnail-service';
-import { useAppStore, type PdfFileEntry } from '@/store/use-app-store';
+import { useAppStore } from '@/store/use-app-store';
 import { effectivePages } from '@/store/selectors';
 
+/** Minimal document shape the dialog needs; `PdfFileEntry` satisfies it. */
+export interface PreviewDocument {
+  id: string;
+  file: File;
+  name: string;
+  pageCount: number;
+  inspection?: PdfInspection;
+}
+
+/**
+ * Lets a tool define its own "is this page part of the output?" semantics.
+ * Merge uses the per-file selection in the store; split passes its own.
+ */
+export interface PreviewSelectionAdapter {
+  isIncluded: (pageIndex: number) => boolean;
+  toggle: (pageIndex: number) => void;
+  includedLabel?: string;
+  excludedLabel?: string;
+  toggleAddLabel?: string;
+  toggleRemoveLabel?: string;
+  /** Hides the inclusion toggle, for modes where a page cannot be toggled. */
+  hideToggle?: boolean;
+  note?: string;
+}
+
 export interface PagePreviewDialogProps {
-  entry: PdfFileEntry;
+  entry: PreviewDocument;
   /** 1-based page number, or `null` when closed. */
   page: number | null;
   onPageChange: (page: number) => void;
   onClose: () => void;
+  /** Overrides the merge selection semantics. */
+  selection?: PreviewSelectionAdapter;
 }
 
 /** CSS pixels per PDF point at 100% (96 dpi, the usual on-screen convention). */
@@ -40,7 +68,7 @@ function toMillimetres(points: number): number {
  * Loads the bitmap for the requested width while keeping the previous frame on
  * screen, so raising the zoom does not flash a blank canvas.
  */
-function usePageImage(entry: PdfFileEntry, page: number | null, width: number) {
+function usePageImage(entry: PreviewDocument, page: number | null, width: number) {
   const [frame, setFrame] = useState<{ page: number; thumb: Thumbnail } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -76,9 +104,22 @@ function usePageImage(entry: PdfFileEntry, page: number | null, width: number) {
   return { thumb: visible, loading };
 }
 
-export function PagePreviewDialog({ entry, page, onPageChange, onClose }: PagePreviewDialogProps) {
+export function PagePreviewDialog({
+  entry,
+  page,
+  onPageChange,
+  onClose,
+  selection,
+}: PagePreviewDialogProps) {
   const togglePage = useAppStore((state) => state.togglePage);
+  const storeFiles = useAppStore((state) => state.files);
   const open = page !== null;
+
+  // Only used when no adapter is supplied, i.e. by the merge tool.
+  const storeSelection = useMemo(() => {
+    const match = storeFiles.find((file) => file.id === entry.id);
+    return new Set(match ? effectivePages(match) : []);
+  }, [storeFiles, entry.id]);
 
   const [mode, setMode] = useState<'fit' | 'manual'>('fit');
   const [manualScale, setManualScale] = useState(1);
@@ -309,8 +350,8 @@ export function PagePreviewDialog({ entry, page, onPageChange, onClose }: PagePr
   /* --------------------------------- render -------------------------------- */
 
   const size = page ? entry.inspection?.pageSizes[page - 1] : undefined;
-  const selectedPages = new Set(effectivePages(entry));
-  const included = page !== null && selectedPages.has(page - 1);
+  const isIncluded = selection?.isIncluded ?? ((index: number) => storeSelection.has(index));
+  const included = page !== null && isIncluded(page - 1);
   const canPan = displayWidth > container.width;
 
   const go = (delta: number) => {
@@ -357,11 +398,11 @@ export function PagePreviewDialog({ entry, page, onPageChange, onClose }: PagePr
           )}
           {included ? (
             <Badge variant="soft" className="ml-auto gap-1">
-              <Check className="size-3" /> 参与合并
+              <Check className="size-3" /> {selection?.includedLabel ?? '参与合并'}
             </Badge>
           ) : (
             <Badge variant="muted" className="ml-auto gap-1">
-              <Minus className="size-3" /> 已排除
+              <Minus className="size-3" /> {selection?.excludedLabel ?? '已排除'}
             </Badge>
           )}
         </div>
@@ -483,7 +524,8 @@ export function PagePreviewDialog({ entry, page, onPageChange, onClose }: PagePr
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-4">
           <p className="text-xs text-muted-foreground">
-            双击切换适应窗口 / 100% · ⌘/Ctrl + 滚轮缩放 · ← → 翻页 · 合并时使用原始矢量页面
+            {selection?.note ??
+              '双击切换适应窗口 / 100% · ⌘/Ctrl + 滚轮缩放 · ← → 翻页 · 合并时使用原始矢量页面'}
           </p>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => go(-1)} disabled={(page ?? 1) <= 1}>
@@ -497,13 +539,22 @@ export function PagePreviewDialog({ entry, page, onPageChange, onClose }: PagePr
             >
               下一页
             </Button>
-            <Button
-              variant={included ? 'secondary' : 'default'}
-              size="sm"
-              onClick={() => page !== null && togglePage(entry.id, page - 1)}
-            >
-              {included ? '从合并中排除' : '加入合并'}
-            </Button>
+            {!selection?.hideToggle && (
+              <Button
+                variant={included ? 'secondary' : 'default'}
+                size="sm"
+                data-testid="preview-toggle-inclusion"
+                onClick={() => {
+                  if (page === null) return;
+                  if (selection) selection.toggle(page - 1);
+                  else togglePage(entry.id, page - 1);
+                }}
+              >
+                {included
+                  ? (selection?.toggleRemoveLabel ?? '从合并中排除')
+                  : (selection?.toggleAddLabel ?? '加入合并')}
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>

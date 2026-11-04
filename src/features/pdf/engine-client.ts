@@ -164,7 +164,10 @@ export class PdfEngineClient {
   }
 
   private releaseWhenIdle(): void {
-    if (this.inspections.size === 0) this.terminate();
+    // Never tear the worker down while a merge still owns it. The split tool
+    // shares this client for inspection, so without this guard importing a PDF
+    // there could kill a merge running in the background tab.
+    if (this.inspections.size === 0 && !this.mergeTicket) this.terminate();
   }
 
   /** Reads page metadata for one file. Bytes are transferred, not copied. */

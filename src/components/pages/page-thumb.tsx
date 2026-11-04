@@ -14,6 +14,10 @@ export interface PageThumbProps {
   /** 1-based position in the final output, shown only when order is custom. */
   order?: number;
   disabled?: boolean;
+  /** Rendered width in CSS pixels. The strip uses 104, the split grid 132. */
+  size?: number;
+  /** Hides the corner check box when the mode has nothing to toggle. */
+  showToggle?: boolean;
   onToggle: () => void;
   onPreview: () => void;
 }
@@ -27,6 +31,8 @@ export function PageThumb({
   selected,
   order,
   disabled,
+  size = LIMITS.thumbnailWidth,
+  showToggle = true,
   onToggle,
   onPreview,
 }: PageThumbProps) {
@@ -59,7 +65,7 @@ export function PageThumb({
   const aspectRatio = thumb ? thumb.width / thumb.height : FALLBACK_RATIO;
 
   return (
-    <div ref={ref} className="w-[104px] shrink-0 snap-start">
+    <div ref={ref} className="shrink-0 snap-start" style={{ width: size }}>
       <div className="relative">
         <button
           type="button"
@@ -103,32 +109,34 @@ export function PageThumb({
           </span>
         </button>
 
-        <button
-          type="button"
-          onClick={onToggle}
-          disabled={disabled}
-          aria-pressed={selected}
-          aria-label={selected ? `取消选择第 ${pageIndex + 1} 页` : `选择第 ${pageIndex + 1} 页`}
-          className={cn(
-            'absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full border-2 border-card transition-all duration-200',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-            selected
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'bg-card text-transparent shadow-sm ring-1 ring-border hover:text-muted-foreground',
-            disabled && 'cursor-not-allowed opacity-60',
-          )}
-        >
-          <svg viewBox="0 0 12 12" className="size-2.5" aria-hidden="true">
-            <path
-              d="M2.5 6.2 5 8.6l4.6-5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
+        {showToggle && (
+          <button
+            type="button"
+            onClick={onToggle}
+            disabled={disabled}
+            aria-pressed={selected}
+            aria-label={selected ? `取消选择第 ${pageIndex + 1} 页` : `选择第 ${pageIndex + 1} 页`}
+            className={cn(
+              'absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full border-2 border-card transition-all duration-200',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+              selected
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'bg-card text-transparent shadow-sm ring-1 ring-border hover:text-muted-foreground',
+              disabled && 'cursor-not-allowed opacity-60',
+            )}
+          >
+            <svg viewBox="0 0 12 12" className="size-2.5" aria-hidden="true">
+              <path
+                d="M2.5 6.2 5 8.6l4.6-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
 
         {order !== undefined && (
           <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-px text-[10px] font-semibold tabular-nums text-primary-foreground shadow-sm">

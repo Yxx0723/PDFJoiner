@@ -29,6 +29,14 @@ export const LIMITS = {
   maxCanvasPixels: 32_000_000,
   /** CSS width used by the generated-PDF preview dialog. */
   generatedPreviewWidth: 560,
+
+  /* ---- PDF split ---- */
+  /** Refuse to produce more files than this; one task = one source document. */
+  maxSplitOutputs: 500,
+  /** Upper bound for "chunk size" in the fixed-pages mode. */
+  maxSplitChunkSize: 200,
+  /** Thumbnail width inside the split page grid. */
+  splitThumbnailWidth: 132,
 } as const;
 
 export const THEME_STORAGE_KEY = 'pdfjoiner-theme';

@@ -66,6 +66,20 @@ export function ratio(value: number, total: number): number {
   return Math.min(1, Math.max(0, value / total));
 }
 
+/**
+ * Downloads an in-memory blob.
+ *
+ * The object URL is released on a timer rather than immediately: every engine
+ * starts the transfer synchronously on click, but Safari has historically been
+ * unforgiving about revoking too early. 5 s is long enough to be safe and short
+ * enough that a burst of downloads cannot pin memory indefinitely.
+ */
+export function triggerBlobDownload(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  triggerDownload(url, fileName);
+  window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 /** Triggers a browser download for an existing object URL. */
 export function triggerDownload(url: string, fileName: string): void {
   const anchor = document.createElement('a');

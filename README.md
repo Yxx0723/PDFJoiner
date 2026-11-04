@@ -1,17 +1,18 @@
 # PDFJoiner Web
 
-浏览器内运行的两个 PDF 工具：**合并 PDF** 与 **图片转 PDF**。打开网页即可使用：不用注册、不用安装，文件 **不会离开这台设备**——解析、预览、排版、编码、导出全部在当前标签页里完成。
+浏览器内运行的三个 PDF 工具：**合并 PDF**、**图片转 PDF**、**PDF 拆分**。打开网页即可使用：不用注册、不用安装，文件 **不会离开这台设备**——解析、预览、排版、拆分、导出全部在当前标签页里完成。
 
-> 合并功能是同名桌面版（Python + PySide6）的 Web 重写。合并引擎、页码规则与错误语义参考了旧版实现，但前端与浏览器 PDF 处理链路是全新写的。图片转 PDF 是同一个应用里的第二个工具，共用设计系统、pdf.js 预览链路与 pdf-lib 依赖。
+> 合并功能是同名桌面版（Python + PySide6）的 Web 重写。合并引擎、页码规则与错误语义参考了旧版实现，但前端与浏览器 PDF 处理链路是全新写的。图片转 PDF 与 PDF 拆分是同一个应用里追加的两个工具，共用设计系统、pdf.js 预览链路与 pdf-lib 依赖。
 
-## 两个工具
+## 三个工具
 
-顶部导航切换，两个工具各自保留自己的文件与设置，互不影响：
+顶部导航切换，三个工具各自保留自己的文件与设置，互不影响：
 
 | 工具 | 路由 | 说明 |
 | --- | --- | --- |
 | PDF 合并 | `#/merge` | 多份 PDF 排序、选页，按页面对象合并，保留矢量内容 |
 | 图片转 PDF | `#/images` | 多张图片排序、旋转，按纸张与边距排版，每张一页 |
+| PDF 拆分 | `#/split` | 一份 PDF 按范围 / 选页 / 逐页 / 固定页数拆成多份，可打包 ZIP |
 
 合并工作区（浅色）：
 
@@ -29,6 +30,14 @@
 
 ![生成结果预览](docs/screenshots/13-images-pdf-preview.png)
 
+PDF 拆分工作区：左侧是文档卡片与页面网格，右侧是拆分设置。缩略图上的编号就是「这一页会进入第几个输出文件」，右侧实时列出每个输出文件的文件名与页码范围。
+
+![PDF 拆分工作区](docs/screenshots/15-split-ranges.png)
+
+拆分完成后逐个列出文件，可单独下载或打包 ZIP：
+
+![拆分结果](docs/screenshots/17-split-result.png)
+
 ## 快速开始
 
 ```bash
@@ -38,8 +47,8 @@ npm run dev          # 开发服务器 http://localhost:5173
 npm run build        # 类型检查 + 生产构建，输出 dist/
 npm run preview      # 本地预览 dist/（默认 4173 端口）
 
-npm run test         # 单元测试（Vitest，106 个）
-npm run test:e2e     # 端到端测试（Playwright，35 个用例 × 3 个内核）
+npm run test         # 单元测试（Vitest，155 个）
+npm run test:e2e     # 端到端测试（Playwright，52 个用例 × 3 个内核）
 npm run lint         # ESLint
 npm run fixtures     # 重新生成测试用 PDF 样本
 npm run fixtures:images  # 重新生成测试用图片样本（需要 Playwright 的 Chromium）
@@ -119,15 +128,51 @@ npx playwright install chromium firefox webkit
 - 「预览」按钮用 PDF.js 把**生成出来的文件**逐页渲染出来，证明结果真的可读
 - 手机端底部固定「生成 PDF」操作条，桌面端为右侧设置栏
 
+## 功能：PDF 拆分
+
+**导入**
+- 点击选择、拖拽到页面任意位置，一次处理一份 PDF（单文件上限 200 MB）
+- 用文件头魔数校验：改了后缀的文本文件会被拒绝并说明原因
+- 加密 PDF 明确提示不支持；损坏文件在卡片上直接显示解析错误
+- 随时「替换」成另一份 PDF，「移除」回到空状态
+
+**四种拆分模式**
+
+| 模式 | 输入 | 输出 |
+| --- | --- | --- |
+| 按页码范围 | 若干行范围，如 `1-5` / `6-10` / `11-15` | 每个范围一个 PDF |
+| 提取指定页面 | `1,3,5,8-12`，或直接点选缩略图 | 一个 PDF，页序＝输入顺序 |
+| 每页单独拆分 | 无 | 每页一个 PDF，编号 `_001`、`_002`… |
+| 按固定页数 | 每份页数，如 5 | 每 5 页一份，最后一份不足也生成 |
+
+**校验与提示**
+- 页码从 1 开始；越界、倒序（`5-2`）、空项、无法识别的写法都会在对应输入框下方给出具体原因
+- **范围重叠会直接阻止拆分**并列出冲突页码（同一页出现在两个文件里几乎总是笔误）
+- 未被任何范围覆盖的页面以「提示」而非「错误」呈现，不阻止拆分
+- 提取模式下重复页码自动去重，并在提示里说明忽略了哪几页
+
+**页面预览**
+- 用 PDF.js 渲染真实缩略图，按需加载；网格一次挂载 120 页，其余按需追加
+- 缩略图角标就是输出文件序号，非提取模式下能把「这一页进第几个文件」一眼看清
+- 点缩略图进入放大预览：可缩放 25%–300%、翻页、双击切换适应窗口 / 100%
+- 提取模式下缩略图带勾选框，点选顺序即输出顺序
+
+**输出**
+- 文件名前缀与命名规则（`_001.pdf` 序号式，或 `_p1-5.pdf` 页码式）
+- 实时列出每个输出文件的文件名与页码范围，以及「N 个文件 · M 页」
+- 完成后逐个显示文件名、页数、体积，可单文件下载，也可打包成 ZIP
+- 每个输出都会重新解析一次做校验，校验不过就整体失败，绝不显示假成功
+
 ## 技术栈
 
 | 层 | 选择 |
 | --- | --- |
 | 框架 | React 18 + TypeScript 5.9 + Vite 5 |
 | 样式 | Tailwind CSS 3.4 + shadcn/ui 风格的本地组件（Radix 原语 + CVA） |
-| PDF 引擎 | pdf-lib 1.17（合并与图片排版共用） |
+| PDF 引擎 | pdf-lib 1.17（合并、图片排版与拆分共用） |
 | 页面预览 | pdfjs-dist 4.10（worker + 自托管 cMaps/标准字体） |
 | 图片解码/编码 | `createImageBitmap` + `OffscreenCanvas`（不可用时降级到主线程 canvas） |
+| 打包下载 | JSZip 3.10（按需动态加载，压缩方式 STORE） |
 | 拖拽排序 | dnd-kit |
 | 状态 | Zustand 5 |
 | 通知 | sonner |
@@ -142,7 +187,7 @@ pdfjoiner-web/
 ├── index.html                    # 单页入口，含防主题闪烁的内联脚本
 ├── src/
 │   ├── main.tsx                  # 挂载、Promise.withResolvers 兜底、全局拖拽拦截
-│   ├── App.tsx                   # 路由分发（合并 / 图片）、布局骨架、通知
+│   ├── App.tsx                   # 路由分发（合并 / 图片 / 拆分）、布局骨架、通知
 │   ├── index.css                 # 设计令牌（HSL 变量）、层级与工具类
 │   ├── components/
 │   │   ├── ui/                   # button, badge, card, dialog, input, progress, tooltip
@@ -152,8 +197,10 @@ pdfjoiner-web/
 │   │   ├── pages/                # 【合并】page-strip、page-thumb、page-preview-dialog
 │   │   ├── merge/                # 【合并】merge-panel（汇总 / 进度 / 结果卡）
 │   │   ├── images/               # 【图片】网格、卡片、设置面板、版面预览、结果卡、结果 PDF 预览
+│   │   ├── split/                # 【拆分】文档卡、模式切换、范围编辑器、页面网格、设置、结果
 │   │   ├── workspace.tsx         # 【合并】两栏布局编排
-│   │   └── images/image-workspace.tsx  # 【图片】两栏布局编排
+│   │   ├── images/image-workspace.tsx  # 【图片】两栏布局编排
+│   │   └── split/split-workspace.tsx   # 【拆分】两栏布局编排 + 预览弹窗接线
 │   ├── features/
 │   │   ├── pdf/                  # 【合并】
 │   │   │   ├── engine.ts         #   纯函数层：inspect + merge（无 DOM 依赖，可在 Node 跑）
@@ -171,16 +218,25 @@ pdfjoiner-web/
 │   │   │   ├── client.ts         #   worker 或主线程双通道，能力探测与取消
 │   │   │   ├── protocol.ts       #   主线程 ↔ 图片 worker 的消息类型
 │   │   │   └── errors.ts
-│   │   ├── page-range/           # 【合并】页码解析与格式化
+│   │   ├── pdf-split/            # 【拆分】
+│   │   │   ├── types.ts          #   模式、设置、输出的类型与文案
+│   │   │   ├── plan.ts           #   纯函数：四模式 → 输出文件清单（UI 与 worker 共用）
+│   │   │   ├── engine.ts         #   一次加载源文档，逐份 copyPages + save + 校验
+│   │   │   ├── client.ts         #   拆分 worker 的主线程 RPC、取消、生命周期
+│   │   │   ├── protocol.ts       #   主线程 ↔ 拆分 worker 的消息类型
+│   │   │   └── zip.ts            #   JSZip 打包（STORE，按需动态加载）
+│   │   ├── page-range/           # 【合并】【拆分】页码解析与格式化
 │   │   └── preview/thumbnail-service.ts  # pdf.js 文档缓存、渲染信号量、LRU
 │   ├── store/
 │   │   ├── use-app-store.ts      # 【合并】文件、选择、合并状态
 │   │   ├── use-image-store.ts    # 【图片】图片、设置、生成状态、对象 URL 生命周期
+│   │   ├── use-split-store.ts    # 【拆分】文档、设置、选择、构建状态
 │   │   └── selectors.ts          # 【合并】汇总、门禁、结构风险提示
 │   ├── hooks/                    # use-theme, use-file-drop, use-in-view
 │   ├── workers/
 │   │   ├── pdf.worker.ts         # 【合并】合并与解析 worker
-│   │   └── image.worker.ts       # 【图片】解码 + OffscreenCanvas 编码 + 组装
+│   │   ├── image.worker.ts       # 【图片】解码 + OffscreenCanvas 编码 + 组装
+│   │   └── split.worker.ts       # 【拆分】拆分 worker
 │   └── lib/                      # utils、constants（上限与阈值）、use-route（hash 路由）
 ├── public/
 │   ├── pdfjs/cmaps/              # 1.6 MB，避免向 CDN 请求中文字体映射
@@ -191,12 +247,13 @@ pdfjoiner-web/
 │   ├── make-fixtures-pypdf.py    # 用 pypdf 生成加密 / 书签 / 注释样本
 │   └── make-image-fixtures.mjs   # 用 Chromium 编码 JPG/PNG/WebP，并手写 BMP/GIF 样本
 ├── tests/
-│   ├── unit/                     # 7 个测试文件 + PDF 内容流 / PNG 生成辅助
+│   ├── unit/                     # 10 个测试文件 + PDF 内容流 / PNG 生成辅助
 │   ├── e2e/
 │   │   ├── app.spec.ts           # 【合并】15 个用例
-│   │   └── images.spec.ts        # 【图片】20 个用例
+│   │   ├── images.spec.ts        # 【图片】20 个用例
+│   │   └── split.spec.ts         # 【拆分】17 个用例
 │   └── fixtures/
-│       ├── *.pdf                 # 合并样本（含加密 / 损坏 / 300 页）
+│       ├── *.pdf                 # 样本（含加密 / 损坏 / 10 页 / 100 页 / 300 页）
 │       └── images/               # 图片样本（含透明 PNG / 大图 / 损坏 / 非图片）
 ├── docs/screenshots/             # 实际运行截图（由 e2e 用例生成）
 ├── dist/                         # 构建产物（npm run build 生成）
@@ -207,6 +264,58 @@ pdfjoiner-web/
 ```
 
 ## 本次新增与修改的文件
+
+### V1.2 — PDF 拆分
+
+同样是在现有工程内扩展：没有新建项目、没有替换技术栈、没有改动合并与图片两条链路的行为。
+
+**新增**
+
+| 路径 | 作用 |
+| --- | --- |
+| `src/features/pdf-split/types.ts` | 拆分模式、设置、输出文件的类型，以及四个模式的文案 |
+| `src/features/pdf-split/plan.ts` | **纯函数拆分计划**：模式 + 设置 → 输出文件清单（含重叠/越界/命名），UI 与引擎共用 |
+| `src/features/pdf-split/engine.ts` | pdf-lib 拆分：一次加载源文档，逐份 `copyPages` + `save` + 逐份校验，无 DOM 依赖 |
+| `src/features/pdf-split/client.ts` | 拆分 worker 的主线程 RPC、协作式取消、任务结束即 `terminate()` |
+| `src/features/pdf-split/protocol.ts` | 主线程 ↔ 拆分 worker 的消息类型 |
+| `src/features/pdf-split/zip.ts` | JSZip 打包（`STORE`，按需 `import()`） |
+| `src/workers/split.worker.ts` | 拆分 worker，文件字节一次转移进入 |
+| `src/store/use-split-store.ts` | 文档、设置、提取模式的有序选择、构建状态、取消、释放 |
+| `src/components/split/split-hero.tsx` | 空状态 |
+| `src/components/split/document-card.tsx` | 文档卡：名称 / 体积 / 页数 / 结构风险提示 / 替换 / 移除 |
+| `src/components/split/mode-tabs.tsx` | 四种模式切换（`aria-pressed`） |
+| `src/components/split/range-list.tsx` | 范围行编辑：增删、行内错误 |
+| `src/components/split/page-grid.tsx` | 页面网格：输出序号角标、按需挂载、点选 |
+| `src/components/split/settings-panel.tsx` | 设置面板：模式、命名、计划预览、错误与提示、执行按钮 |
+| `src/components/split/result-panel.tsx` | 进度 / 成功 / 失败三态，单文件下载与 ZIP |
+| `src/components/split/split-workspace.tsx` | 两栏编排、移动端底部操作条、预览弹窗接线 |
+| `tests/unit/split-plan.test.ts` | 26 个计划用例 |
+| `tests/unit/split-engine.test.ts` | 19 个引擎用例（页数、页序、页面框、矢量、进度、取消、加密/损坏/越界，以及注释/书签/表单的实测结论） |
+| `tests/unit/split-pdfjs.test.ts` | 4 个用例：用 **PDF.js** 重新打开输出，核对页数、页序与页面内容 |
+| `tests/e2e/split.spec.ts` | 17 个端到端用例 |
+| `tests/fixtures/pages-10.pdf`、`pages-100.pdf` | 带页码标签的样本，用于逐页内容核对 |
+| `docs/screenshots/14–20-*.png` | 新增的运行截图 |
+
+**修改**
+
+| 路径 | 改动 |
+| --- | --- |
+| `src/lib/use-route.ts` | 路由类型增加 `split`，解析改为白名单匹配 |
+| `src/components/layout/tool-nav.tsx` | 增加第三项「PDF 拆分」 |
+| `src/App.tsx` | 三路渲染；`beforeunload` 与卸载释放同时覆盖三套状态 |
+| `src/components/pages/page-thumb.tsx` | 新增 `size`（网格用 132px）与 `showToggle`（非提取模式隐藏勾选框） |
+| `src/components/pages/page-preview-dialog.tsx` | 新增可选 `selection` 适配器与 `hideToggle`，合并侧的默认行为不变；props 类型放宽为结构化的 `PreviewDocument` |
+| `src/features/pdf/engine-client.ts` | 修复潜在竞态：`releaseWhenIdle()` 不再在合并进行中终止 worker |
+| `src/lib/constants.ts` | 追加拆分上限（输出份数、每份页数、网格缩略图宽度） |
+| `src/lib/utils.ts` | 新增 `triggerBlobDownload()`（下载后延时释放 object URL） |
+| `scripts/make-fixtures.mjs` | 新增 10 页 / 100 页带标签样本 |
+| `index.html` | 标题与描述覆盖三个工具 |
+| `package.json` | 新增依赖 `jszip` |
+| `README.md` | 本文 |
+
+**未改动**：`src/features/pdf/engine.ts`、`src/features/image-pdf/*`、`src/store/use-app-store.ts`、`src/store/use-image-store.ts`、`src/components/merge/*`、`src/components/files/*`、`src/components/images/*`、`src/workers/pdf.worker.ts`、`src/workers/image.worker.ts`、`vite.config.ts`、设计令牌。合并与图片两组端到端用例全部保持通过。
+
+### V1.1 — 图片转 PDF
 
 图片转 PDF 是在现有工程内扩展的，没有新建项目、没有替换技术栈，也没有改动合并引擎的行为。
 
@@ -411,6 +520,48 @@ Blob 通过结构化克隆按引用传给 worker（不复制字节），编码�
 - 输出会被重新 `PDFDocument.load()` 一次：页数不符直接抛错（绝不产出「失败但显示成功」的结果），页面尺寸与预期不一致则把 `verified` 置为 `false`。
 - 生成结束后 worker `terminate()`，pdf-lib 的内部对象随之回收。
 
+## 工作原理：PDF 拆分
+
+### 1. 计划与执行分离
+
+`src/features/pdf-split/plan.ts` 里的 `buildSplitPlan(pageCount, settings)` 是纯函数，输入「页数 + 模式 + 设置」，输出**将要生成的每个文件**：文件名、0-based 页码数组、人类可读的页码范围。
+
+界面用它画「预计输出」和按钮文案，worker 用它当复制清单，单元测试直接调它。因此不可能出现「界面说 4 个文件、实际生成 5 个」这种偏差——两处是同一份计算。
+
+页码约定与合并工具一致：**用户输入 1-based，计划里一律 0-based**。转换只发生在 `plan.ts` 和 `describePages()` 两个地方。
+
+### 2. 一份文档只解析一次
+
+```ts
+const source = await PDFDocument.load(bytes);        // 只做一次
+for (const job of jobs) {
+  const out = await PDFDocument.create();
+  for (批量 25 页) await out.copyPages(source, batch);  // 只复制页面对象
+  const saved = await out.save({ useObjectStreams: true });
+  // 立刻重新 load 一遍，页数不符就整体失败
+}
+```
+
+把 300 页拆成 300 个文件，只有 1 次源解析 + 300 次小文档序列化，而不是 300 次源解析。每批之间 `await setTimeout(0)`，取消请求才有机会被 worker 读到。
+
+### 3. 页面对象复制，不是二进制切片
+
+`copyPages` 复制的是页面字典及其引用的资源：MediaBox、`/Rotate`、字体、矢量操作符、图片 XObject 都会跟着走。所以：
+
+- 原来横向的页面拆分后仍然横向（单元测试断言 `841.89 × 595.28`）；
+- 页面里仍然是 `BT … Tj` 文本算子，没有 Image XObject（断言 `imageXObjectNames()` 为空）；
+- 不会出现「清晰度下降」——根本没有重新光栅化这一步。
+
+反过来，页面之外的结构不会被带过去，这一点在下面的「已知限制」里逐条写清楚。
+
+### 4. Worker、字节转移与取消
+
+文件字节通过 `postMessage` 的 transfer 列表**转移**给 worker（不是复制），源文档全程留在 worker 里；主线程只收最终产物。取消是协作式的：`shouldCancel()` 在每批页面和每个输出文件之前检查，取消后不产出任何文件，也不报「成功」。
+
+### 5. 为什么 ZIP 用 STORE 而不是 DEFLATE
+
+PDF 内部的对象流本来就是压缩过的，再 deflate 一遍通常只省 1–2%，却要在主线程消耗可观 CPU。所以 ZIP 以 `compression: 'STORE'` 打包：解出来的字节与单独下载的文件**完全一致**，这也让端到端测试可以用 JSZip 解包后直接解析 PDF 来核对。JSZip 本身是 `await import()` 的，不进首屏包。
+
 ## 页码语法
 
 页码从 1 开始，输出顺序与输入顺序完全一致。
@@ -432,7 +583,7 @@ Blob 通过结构化克隆按引用传给 worker（不复制字节），编码�
 
 | 承诺 | 代码依据 |
 | --- | --- |
-| 文件不上传 | `src/` 内不存在 `fetch` / `XMLHttpRequest` / `sendBeacon` / `WebSocket` / `EventSource`（可用 `grep -rn "fetch(" src/` 复核）；合并与图片两条链路各有一个 e2e 用例在真实浏览器里断言「只有同源 GET」，图片侧的用例还会先打开 PDF.js 预览，把静态资源请求也纳入审计 |
+| 文件不上传 | `src/` 内不存在 `fetch` / `XMLHttpRequest` / `sendBeacon` / `WebSocket` / `EventSource`（可用 `grep -rn "fetch(" src/` 复核）；合并、图片、拆分三条链路各有一个 e2e 用例在真实浏览器里断言「只有同源 GET」，图片侧的用例还会先打开 PDF.js 预览，把静态资源请求也纳入审计 |
 | 不接第三方 | 没有分析脚本、没有 CDN、没有 Web 字体；pdf.js 的 cMaps 与标准字体自托管在 `public/pdfjs/` |
 | 不需要注册 | 无账号系统、无 localStorage 用户标识，只存一个主题偏好 |
 | 不收集内容 | 没有日志上报；`src/` 内没有任何 `console.*` |
@@ -446,7 +597,7 @@ Blob 通过结构化克隆按引用传给 worker（不复制字节），编码�
 
 ## 测试
 
-### 单元测试（Vitest，106 个）
+### 单元测试（Vitest，155 个）
 
 ```bash
 npm run test
@@ -461,6 +612,9 @@ npm run test
 | `image-layout.test.ts` | 纸张预设换算、原图尺寸与 DPI、自定义毫米、自动/强制方向、旋转后换向、三种适配的几何、四档边距与夹紧 |
 | `image-encode.test.ts` | `drawRotated` 的变换矩阵（把四角映射回画布，证明不多不少正好填满）、目标像素不放大、旋转后宽高互换、画布像素上限、`hexToRgb` |
 | `image-build.test.ts` | 每图一页与顺序、页面尺寸、背景填充色、contain 不裁剪、cover 的 `re W n` 裁剪框与溢出、stretch 精确铺满、透明 PNG 的 `/SMask`、旋转后像素尺寸、取消、空计划、原字节被拒时的重编码回退 |
+| `split-plan.test.ts` | 四模式输出清单与命名、范围重叠、越界、倒序、空范围、未覆盖页提示、提取顺序与去重、10 页/23 页/100 页、超出输出上限 |
+| `split-engine.test.ts` | 单页 PDF、3 页 → 3 个单页文件、范围页数 3/4/3、倒序页序、重复页、页面框与横向保留、矢量内容、每个输出的标题、100 页 → 100 个文件、进度单调性、取消、加密/损坏/越界/空计划，以及注释保留 / 书签丢失 / 表单丢失三项实测 |
+| `split-pdfjs.test.ts` | 用 **PDF.js** 重新打开每个拆分结果，核对页数、页序（按页面上的 `T-n` 标签）、页面内容与页面尺寸 |
 
 引擎测试直接读取 `tests/fixtures/` 下的真实 PDF，并通过解压内容流断言「文字仍是文字」：
 
@@ -469,7 +623,7 @@ expect(pageHasTextOperators(page, doc)).toBe(true);   // 内容流里有 BT / Tj
 expect(imageXObjectNames(page, doc)).toEqual([]);     // 页面资源里没有图片 XObject
 ```
 
-### 端到端测试（Playwright，35 个用例）
+### 端到端测试（Playwright，52 个用例）
 
 ```bash
 npm run test:e2e                                    # 三个浏览器全跑
@@ -482,17 +636,19 @@ npx playwright test --project=chromium              # 只跑 Chromium
 
 **图片转 PDF（`images.spec.ts`，20 个）**：工具切换与状态互不干扰、JPG/PNG 导入信息、五种格式混合出 5 页、重复跳过与损坏/非图片报错、拖拽排序改变输出顺序、旋转 90°（同时断言页面转横向**且**嵌入图片的像素宽高互换）、删除减页、A5/自定义/原图尺寸（300 DPI）、三种适配（含 `re W n` 裁剪与精确铺满）、宽边距缩小可用区域、**预览裁剪范围与引擎一致**（比较 DOM 里的裁剪框与页面盒子）、透明 PNG 的 `/SMask` 与背景色、压缩档位真的更小、缺 OffscreenCanvas 时降级、PDF.js 回读生成结果、改文件名下载、取消不产出结果、同源 GET 审计、手机尺寸全流程、截图。
 
-合并与图片两侧都做了「下载真实文件 → 用 pdf-lib 重新解析 → 断言页数 / 页面尺寸 / 嵌入图片的像素尺寸 / 内容流」的闭环，而不是只检查界面文案。
+**PDF 拆分（`split.spec.ts`，17 个）**：三工具导航互通、载入后页数与缩略图、加密/损坏/伪装 PDF 的拒绝、默认两段拆分、增删范围行、重叠阻止拆分、越界行内提示、提取模式点选与输入同步且保持顺序、全选/反选/清空、逐页拆分 10 个文件编号连续、固定页数（最后一份不足）、100 页按 25 页拆、**ZIP 解包后解析其中一份 PDF**、取消不产出结果、同源 GET 审计、手机尺寸全流程、截图。
+
+三侧都做了「下载真实文件 → 重新解析 → 断言页数 / 页面尺寸 / 嵌入图片像素 / 内容流 / 页面文字」的闭环，而不是只检查界面文案。拆分还额外用 PDF.js 独立复核，避免「只有写入方能读」的假通过。
 
 ### 浏览器验证矩阵
 
-完整回归 `npx playwright test`：**101 通过 / 4 跳过**（跳过的是两个「界面截图」用例，按设计只在 Chromium 生成一次截图）。
+完整回归 `npx playwright test`：**150 通过 / 6 跳过**（跳过的是三个「界面截图」用例，按设计只在 Chromium 生成一次截图）。
 
 | 浏览器 | 实际内核（Playwright 1.64.1） | 结果 |
 | --- | --- | --- |
-| Chrome / Chromium | Chromium 156.0.8078.4 | 35/35 通过 |
-| Firefox | Firefox 157.0 | 34/34 通过（1 个截图用例跳过） |
-| Safari（WebKit 内核） | WebKit 27.2 | 34/34 通过（1 个截图用例跳过） |
+| Chrome / Chromium | Chromium 156.0.8078.4 | 52/52 通过 |
+| Firefox | Firefox 157.0 | 49/49 通过（3 个截图用例跳过） |
+| Safari（WebKit 内核） | WebKit 27.2 | 49/49 通过（3 个截图用例跳过） |
 | Microsoft Edge | 与 Chromium 同内核 | **未验证**：没有在真实 Edge 中运行过，只覆盖了同内核的 Chromium |
 | iOS Safari | — | **未验证**：没有真机环境 |
 
@@ -566,6 +722,28 @@ location / {
 | EXIF 方向 | 由浏览器解码时应用（`imageOrientation: 'from-image'`） | 界面显示的宽高即「看得见的宽高」，与导出结果一致 |
 | 预览清晰度 | 版面预览是 CSS 缩放，放大后是插值；受检查的是版式而非像素 | 导出始终使用原始像素或按 DPI 计算的目标像素 |
 
+**能力边界：PDF 拆分**
+
+| 项 | 现状 | 原因 |
+| --- | --- | --- |
+| 加密 PDF | 明确拒绝 | 与合并一致：pdf-lib 不能解密，项目内不存在 `ignoreEncryption` |
+| 文档书签、表单、附件、数字签名 | 不随页面复制，导入时在文档卡上提前提示 | `copyPages` 只搬页面对象；这些是文档级结构，新建文档不会继承。**逐项实测结论见下方** |
+| 页面注释 | 保留 | 注释挂在页面 `/Annots` 上，跟页面一起走 |
+| 一次任务 | 1 份 PDF、最多 500 个输出文件 | 纯内存 + 一次性打包 ZIP 的现实边界 |
+| ZIP 体积 | 与所有输出之和基本相同（STORE 不压缩） | PDF 已压缩，再 deflate 收益 < 2% 而 CPU 开销明显 |
+| 输出命名 | 前缀 + 序号 / 页码；重名不自动去重 | 拆分结果通常落在不同目录；同一前缀且页码式命名在极端情况下可能重复，界面会列出全部文件名供核对 |
+
+**实测记录的文档级结构损失（拆分）**
+
+| 结构 | 拆分后 | 验证方式 |
+| --- | --- | --- |
+| 页面内容、页面尺寸、方向、旋转 | 保留 | 单元测试断言页面框 `595.28×841.89` / 横向 `841.89×595.28` 与 `BT…Tj` 文本算子 |
+| 页面注释 | 保留 | 实测：`outlined-annotated.pdf` 拆分后输出页仍带 `/Annots`，`inspectPdfBytes().hasAnnotations` 为 `true` |
+| 文档书签（Outlines） | 丢失 | 实测：源文件 `hasOutlines === true`，输出 `catalog.get(/Outlines)` 为 `undefined`。目录树挂在 catalog，不在页面对象上 |
+| 交互表单（AcroForm） | 丢失字段定义，外观仍在 | 实测：源 `hasForms === true`，输出 `hasForms === false`，页数仍为 1；拆分后不能再编辑 |
+| 数字签名 | 失效 | 输出是重新序列化的新文档，签名覆盖范围必然改变。**未单独跑签名样本**，结论来自 PDF 规范而非本项目实测 |
+| 附件、文档级 JavaScript、页面标签 | 视为丢失 | 均为 catalog 级结构，`copyPages` 不会带走。**未单独实测** |
+
 **实现取舍**
 
 - 输出小于 64 MB 才做二次校验，更大的文件跳过校验并在界面明确标注。
@@ -578,6 +756,8 @@ location / {
 - 图片的「目标像素」按 120 / 200 / 300 DPI 换算，并**不超过原图**，所以小图不会被拉大、大图才会缩小。
 - 「原图尺寸」模式下页面大小由「像素 ÷ DPI」决定，因此降低分辨率不会改变页面尺寸，只改变 PDF 里的像素量。
 - 已排序的图片被删除或新增时，版面预览会自动切到仍然存在的图片；预览索引没有做「记住上一次」的持久化。
+- 拆分 300 页以上并选择「每页单独拆分」时，所有输出会同时留在内存里以便打包 ZIP；这是任务规模上限（500 个文件）的主要依据。
+- 拆分的输出文件名不做全局去重：若前缀与页码式命名恰好产生同名文件，ZIP 里会出现同名条目（后写入的覆盖先写入的）。界面会完整列出文件名，便于事前发现。
 
 **未验证项（如实标注）**
 

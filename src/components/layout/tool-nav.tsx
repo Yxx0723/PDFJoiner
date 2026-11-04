@@ -1,4 +1,4 @@
-import { Images, Layers2 } from 'lucide-react';
+import { Images, Layers2, Scissors } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { routeHref, type ToolRoute } from '@/lib/use-route';
@@ -6,6 +6,7 @@ import { routeHref, type ToolRoute } from '@/lib/use-route';
 const TOOLS: Array<{ route: ToolRoute; label: string; short: string; icon: typeof Layers2 }> = [
   { route: 'merge', label: 'PDF 合并', short: '合并', icon: Layers2 },
   { route: 'images', label: '图片转 PDF', short: '图片', icon: Images },
+  { route: 'split', label: 'PDF 拆分', short: '拆分', icon: Scissors },
 ];
 
 /**

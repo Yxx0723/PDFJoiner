@@ -127,7 +127,26 @@ manifest.files.push(
   }),
 );
 
-// 5. Broken: a valid PDF truncated halfway through.
+// 5. Ten pages with distinct labels, for the split tool: each output file can
+//    be checked by the text it contains, not just by its page count.
+manifest.files.push(
+  await makeDocument({
+    file: 'pages-10.pdf',
+    title: 'Fixture E — Ten labelled pages',
+    pages: Array.from({ length: 10 }, (_, index) => ({ ...A4, label: `T-${index + 1}` })),
+  }),
+);
+
+// 6. One hundred pages, same idea at the size the acceptance list asks for.
+manifest.files.push(
+  await makeDocument({
+    file: 'pages-100.pdf',
+    title: 'Fixture F — One hundred labelled pages',
+    pages: Array.from({ length: 100 }, (_, index) => ({ ...A4, label: `H-${index + 1}` })),
+  }),
+);
+
+// 7. Broken: a valid PDF truncated halfway through.
 const source = await PDFDocument.load(
   (await import('node:fs')).readFileSync(join(outDir, 'report-a.pdf')),
 );
@@ -135,11 +154,11 @@ const intact = await source.save();
 writeFileSync(join(outDir, 'broken.pdf'), intact.subarray(0, Math.floor(intact.length * 0.55)));
 manifest.files.push({ file: 'broken.pdf', pageCount: null, note: 'truncated, must be rejected' });
 
-// 6. Not a PDF at all, but with a .pdf extension.
+// 8. Not a PDF at all, but with a .pdf extension.
 writeFileSync(join(outDir, 'not-a-pdf.pdf'), 'This is a plain text file wearing a PDF costume.\n');
 manifest.files.push({ file: 'not-a-pdf.pdf', pageCount: null, note: 'text content, must be rejected' });
 
-// 7. Duplicate of report-a.pdf under a different name — used for the
+// 9. Duplicate of report-a.pdf under a different name — used for the
 //    "identical bytes, different name" case.
 copyFileSync(join(outDir, 'report-a.pdf'), join(outDir, 'report-a-copy.pdf'));
 manifest.files.push({ file: 'report-a-copy.pdf', pageCount: 3, note: 'same bytes as report-a.pdf' });
