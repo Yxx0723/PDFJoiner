@@ -1,0 +1,56 @@
+{
+  "generatedBy": "scripts/make-image-fixtures.mjs",
+  "files": [
+    {
+      "name": "photo-portrait.jpg",
+      "width": 900,
+      "height": 1350,
+      "format": "jpeg"
+    },
+    {
+      "name": "photo-landscape.jpg",
+      "width": 1600,
+      "height": 900,
+      "format": "jpeg"
+    },
+    {
+      "name": "graphic.png",
+      "width": 800,
+      "height": 800,
+      "format": "png",
+      "alpha": true
+    },
+    {
+      "name": "shot.webp",
+      "width": 1024,
+      "height": 640,
+      "format": "webp"
+    },
+    {
+      "name": "scan.bmp",
+      "width": 640,
+      "height": 480,
+      "format": "bmp"
+    },
+    {
+      "name": "huge.jpg",
+      "width": 4000,
+      "height": 3000,
+      "format": "jpeg"
+    },
+    {
+      "name": "tiny.gif",
+      "width": 1,
+      "height": 1,
+      "format": "gif"
+    },
+    {
+      "name": "broken.jpg",
+      "broken": true
+    },
+    {
+      "name": "not-image.png",
+      "unsupported": true
+    }
+  ]
+}

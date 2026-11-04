@@ -1,0 +1,209 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98.4%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 18% 44%;
+
+    --accent: 214 95% 95%;
+    --accent-foreground: 221 83% 40%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+    --primary-soft: 214 95% 96%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 20%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 0 86% 97%;
+
+    --success: 158 74% 32%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 152 76% 96%;
+
+    --warning: 32 95% 40%;
+    --warning-foreground: 0 0% 100%;
+    --warning-soft: 44 96% 96%;
+
+    --border: 214 26% 90%;
+    --input: 214 26% 88%;
+    --ring: 221 83% 53%;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 222 47% 5.6%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 40% 8.6%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 40% 9.5%;
+    --popover-foreground: 210 40% 98%;
+
+    --muted: 217 33% 13%;
+    --muted-foreground: 215 20% 66%;
+
+    --accent: 217 55% 16%;
+    --accent-foreground: 213 94% 80%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 6%;
+    --primary-soft: 219 60% 14%;
+
+    --secondary: 217 33% 14%;
+    --secondary-foreground: 210 40% 96%;
+
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 0 45% 14%;
+
+    --success: 152 60% 45%;
+    --success-foreground: 150 60% 6%;
+    --success-soft: 155 45% 12%;
+
+    --warning: 38 92% 55%;
+    --warning-foreground: 30 60% 8%;
+    --warning-soft: 35 45% 14%;
+
+    --border: 217 33% 17%;
+    --input: 217 33% 22%;
+    --ring: 217 91% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: hsl(var(--primary) / 0.18);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Slim, unobtrusive scrollbars (WebKit + Firefox). */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.45);
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  /* Soft ambient wash behind the whole app. */
+  .app-canvas {
+    background-image:
+      radial-gradient(58% 42% at 50% -10%, hsl(var(--primary) / 0.1), transparent 72%),
+      radial-gradient(38% 30% at 92% -4%, hsl(199 89% 60% / 0.09), transparent 70%);
+  }
+
+  .dark .app-canvas {
+    background-image:
+      radial-gradient(58% 42% at 50% -10%, hsl(var(--primary) / 0.16), transparent 72%),
+      radial-gradient(38% 30% at 92% -4%, hsl(199 89% 60% / 0.08), transparent 70%);
+  }
+
+  .card-surface {
+    @apply rounded-xl border border-border bg-card shadow-soft;
+  }
+
+  .focus-ring {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-muted;
+  }
+
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--foreground) / 0.06),
+      transparent
+    );
+  }
+
+  .checker {
+    background-image:
+      linear-gradient(45deg, hsl(var(--muted)) 25%, transparent 25%),
+      linear-gradient(-45deg, hsl(var(--muted)) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, hsl(var(--muted)) 75%),
+      linear-gradient(-45deg, transparent 75%, hsl(var(--muted)) 75%);
+    background-size: 10px 10px;
+    background-position:
+      0 0,
+      0 5px,
+      5px -5px,
+      -5px 0px;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .grab {
+    cursor: grab;
+  }
+  .grab:active {
+    cursor: grabbing;
+  }
+}
